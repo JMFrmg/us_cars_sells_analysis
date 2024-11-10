@@ -14,6 +14,7 @@ from pandas.api.types import (
 import warnings
 warnings.filterwarnings("ignore")
 
+
 st.set_page_config(layout="wide")
 
 st.markdown("<h1 style='text-align: center; color: orange;'>Ventes de voitures aux Etats-Unis</h1>", unsafe_allow_html=True)
@@ -26,16 +27,24 @@ FIXED_FILTERS = ["date_de_vente", "marque_du_véhicule",
 def format_column(c):
     return c.replace("_", " ").capitalize()
 
-
 @st.cache_data
-def load_data():
+def load_data() -> pd.DataFrame:
+    """
+    Load data from CSV file
+
+    Args:
+        None
+
+    Returns:
+        pd.DataFrame: Loaded dataframe and rename columns
+    """
     data = pd.read_csv(DATA_PATH)
     lowercase = lambda x: str(x).lower()
     data.rename(lowercase, axis='columns', inplace=True)
     data[DATE_COLUMN] = pd.to_datetime(data[DATE_COLUMN])
-    data.columns = ["Année", "marque_du_véhicule", "modèle_du_véhicule", "Trim", "type_de_véhicule", 
-                    "Transmission", "Etat", "Condition", "Kilomètres",
-                    "couleur_du_vehicule", "Intérieur", "nom_du_vendeur", "MMR", 
+    data.columns = ["année", "marque_du_véhicule", "modèle_du_véhicule", "trim", "type_de_véhicule", 
+                    "transmission", "etat", "condition", "kilomètres",
+                    "couleur_du_vehicule", "intérieur", "nom_du_vendeur", "mmr", 
                     "prix_de_vente", "date_de_vente"]
     data.columns = [c.lower() for c in data.columns]
     column_order = ["marque_du_véhicule", "modèle_du_véhicule", "type_de_véhicule", 
@@ -44,14 +53,6 @@ def load_data():
                     "couleur_du_vehicule", "intérieur", "nom_du_vendeur", "mmr"]
     data = data[column_order]
     data["type_de_véhicule"] = pd.Categorical(data.type_de_véhicule)
-    return data
-
-@st.cache_data
-def load_nrows(nrows):
-    data = pd.read_csv(DATA_PATH, nrows=nrows)
-    lowercase = lambda x: str(x).lower()
-    data.rename(lowercase, axis='columns', inplace=True)
-    data[DATE_COLUMN] = pd.to_datetime(data[DATE_COLUMN])
     return data
 
 def filter_dataframe(df: pd.DataFrame, fixed_filters: list) -> pd.DataFrame:
@@ -78,24 +79,23 @@ def filter_dataframe(df: pd.DataFrame, fixed_filters: list) -> pd.DataFrame:
         if is_datetime64_any_dtype(df[col]):
             df[col] = df[col].dt.tz_localize(None)
 
-    modification_container = st.sidebar
-
-    with modification_container:
+    with st.sidebar:
         left, right = st.columns((1, 20))
 
         added_filters = right.multiselect("Ajouter un filtre", [c for c in df.columns if c not in fixed_filters])
         
         to_filter_columns = fixed_filters + added_filters
+        
         for column in to_filter_columns:
-            
             # Treat columns with < 10 unique values as categorical
             if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
                 user_cat_input = right.multiselect(
                     f"Values for {column}",
                     df[column].unique(),
-                    default=list(df[format_column(column)].unique()),
+                    default=list(df[column].unique()),
                 )
                 df = df[df[column].isin(user_cat_input)]
+            
             elif is_numeric_dtype(df[column]):
                 _min = float(df[column].min())
                 _max = float(df[column].max())
@@ -108,6 +108,7 @@ def filter_dataframe(df: pd.DataFrame, fixed_filters: list) -> pd.DataFrame:
                     step=step,
                 )
                 df = df[df[column].between(*user_num_input)]
+            
             elif is_datetime64_any_dtype(df[column]):
                 user_date_input = right.date_input(
                     f"{format_column(column)}",
@@ -120,6 +121,7 @@ def filter_dataframe(df: pd.DataFrame, fixed_filters: list) -> pd.DataFrame:
                     user_date_input = tuple(map(pd.to_datetime, user_date_input))
                     start_date, end_date = user_date_input
                     df = df.loc[df[column].between(start_date, end_date)]
+            
             else:
                 user_text_input = right.text_input(
                     f"{format_column(column)}",
@@ -130,7 +132,17 @@ def filter_dataframe(df: pd.DataFrame, fixed_filters: list) -> pd.DataFrame:
             
     return df
 
-def group_dataframe(df):
+def group_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Collect all requested data from user with streamlit inputs.
+    Then, apply groupby on dataframe.
+
+    Args:
+        df (pd.DataFrame): Original dataframe
+
+    Returns:
+        pd.DataFrame: Grouped dataframe
+    """
     with st.sidebar:
         left, right = st.columns((1, 20))
 
@@ -149,6 +161,7 @@ def group_dataframe(df):
         numeric_agg = ["min", "max", "mean", "median", "sum"]
         categorical_agg = ["expand", "first", "last"]
         agg_dict = {}
+        
         for column in columns:
             if is_numeric_dtype(df[column]):
                 agg_func = right.selectbox(
@@ -182,13 +195,22 @@ def group_dataframe(df):
     
     return df
 
-def format_sort_options(ascending):
+def format_sort_options(ascending: bool) -> str:
     if ascending:
         return "Croissant"
     else:
         return "Décroissant"
 
-def sort_rows(df):
+def sort_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Sort dataframe.
+
+    Args:
+        df (pd.DataFrame): Original dataframe
+
+    Returns:
+        pd.DataFrame: Sorted dataframe
+    """
     with st.sidebar:
         left, right = st.columns((1, 20))
 
@@ -211,7 +233,7 @@ def sort_rows(df):
         return df
 
 
-def exploration():
+def exploration() -> pd.DataFrame:
     data = load_data()
     
     st.sidebar.markdown("### :orange[Trier les lignes]")
@@ -227,7 +249,6 @@ def exploration():
     return data
 
 df = exploration()
-
 
 
 column_config = {
@@ -260,14 +281,15 @@ column_config = {
             step=1,
         ),
 }
+
+# Display dataframe
 st.dataframe(df, use_container_width=True, height=600, 
              hide_index=True,
              column_config=column_config)
 
+# Excel file
 col1, col2, col3 = st.columns([2,2,2])
-
 flnme = col3.text_input("Nom du fichier excel")
-
 if not flnme:
     pass
 else:
